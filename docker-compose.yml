@@ -1,0 +1,73 @@
+version: '3'
+volumes:
+  esdata01:
+    driver: local
+  esdictionary01:
+    driver: local
+
+services:
+  es01:
+    image: ghcr.io/codelibs/fess-elasticsearch-oss:7.10.1
+    container_name: es01
+    environment:
+      - node.name=es01
+      - discovery.seed_hosts=es01
+      - cluster.initial_master_nodes=es01
+      - cluster.name=fess-es
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "FESS_DICTIONARY_PATH=/usr/share/elasticsearch/config/dictionary"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - esdata01:/usr/share/elasticsearch/data
+      - esdictionary01:/usr/share/elasticsearch/config/dictionary
+    ports:
+      - 9200:9200
+    networks:
+      - esnet
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  fess01:
+    image: ghcr.io/codelibs/fess:13.10.1
+    container_name: fess01
+    environment:
+      - RUN_ELASTICSEARCH=false
+      - "ES_HTTP_URL=http://es01:9200"
+      - "FESS_DICTIONARY_PATH=/usr/share/elasticsearch/config/dictionary/"
+    ports:
+      - "8080:8080"
+    networks:
+      - esnet
+    depends_on:
+      - es01
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  ng01:
+    image: nginx:1.19.6-alpine
+    container_name: ng01
+    volumes:
+      - ./conf.d/:/etc/nginx/conf.d/
+    ports:
+      - "80:80"
+    networks:
+      - esnet
+    depends_on:
+      - fess01
+
+networks:
+  esnet:
+    driver: bridge
